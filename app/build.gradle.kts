@@ -198,11 +198,9 @@ dependencies {
 // Output is written to jniLibs/arm64-v8a/ (a pre-built copy lives there as
 // fallback; this task overwrites it when the NDK is present).
 // ---------------------------------------------------------------------------
-val ndkDir: File = android.ndkDirectory
 val scorerSrc = File(rootDir, "scorer/cpp")
 val scorerBuild = layout.buildDirectory.dir("kenlm_jni").get().asFile
 val scorerOutput = file("src/main/jniLibs/arm64-v8a/libspectre_score.so")
-val toolchainFile = "$ndkDir/build/cmake/android.toolchain.cmake"
 
 tasks.register("buildKenLmJni") {
     description = "Build libspectre_score.so (KenLM JNI) for arm64-v8a using the NDK."
@@ -213,6 +211,27 @@ tasks.register("buildKenLmJni") {
 
     doLast {
         scorerBuild.mkdirs()
+
+        // Resolve NDK/toolchain lazily at execution time and skip the task if the NDK
+        // or CMake toolchain file is not available on the runner. Accessing
+        // android.ndkDirectory at configuration time caused the CI failure.
+        val ndkDir: File? = try {
+            android.ndkDirectory
+        } catch (e: Exception) {
+            null
+        }
+
+        if (ndkDir == null || !ndkDir.exists()) {
+            logger.lifecycle("NDK not found (android.ndkDirectory is absent); skipping buildKenLmJni.")
+            return@doLast
+        }
+
+        val toolchainFile = "$${"ndkDir"}/build/cmake/android.toolchain.cmake".replace("${"ndkDir"}", ndkDir.absolutePath)
+        if (!file(toolchainFile).exists()) {
+            logger.lifecycle("CMake toolchain file not found at $toolchainFile; skipping buildKenLmJni.")
+            return@doLast
+        }
+
         exec {
             commandLine(
                 "cmake",
