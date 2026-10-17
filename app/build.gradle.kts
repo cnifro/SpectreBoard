@@ -10,11 +10,16 @@ plugins {
 
 android {
     signingConfigs {
-        create("termux") {
-            storeFile = file(project.findProperty("TERMUX_KEYSTORE") as String)
-            storePassword = project.findProperty("TERMUX_STORE_PASSWORD") as String
-            keyAlias = project.findProperty("TERMUX_KEY_ALIAS") as String
-            keyPassword = project.findProperty("TERMUX_KEY_PASSWORD") as String
+        // Only create the "termux" signing config if the necessary properties are present.
+        // In CI these properties are typically not set, and forcing `as String` on a null
+        // `findProperty` causes a configuration-time crash. Guarding avoids that.
+        if (project.hasProperty("TERMUX_KEYSTORE")) {
+            create("termux") {
+                storeFile = file(project.findProperty("TERMUX_KEYSTORE") as String)
+                storePassword = project.findProperty("TERMUX_STORE_PASSWORD") as String
+                keyAlias = project.findProperty("TERMUX_KEY_ALIAS") as String
+                keyPassword = project.findProperty("TERMUX_KEY_PASSWORD") as String
+            }
         }
     }
 
@@ -42,7 +47,9 @@ android {
             isShrinkResources = false
             isDebuggable = false
             isJniDebuggable = false
-            signingConfig = signingConfigs.getByName("termux")
+            // Only assign the termux signing config if we actually created it. This prevents
+            // configuration-time failures when TERMUX_* properties are absent (e.g., in CI).
+            signingConfigs.findByName("termux")?.let { signingConfig = it }
         }
         create("nouserlib") { // same as release, but does not allow the user to provide a library
             isMinifyEnabled = true
